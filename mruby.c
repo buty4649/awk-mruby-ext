@@ -4,11 +4,14 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <stdbool.h>
 #include <sys/stat.h>
 #include <gawkapi.h>
 
 #include <mruby.h>
+#include <mruby/array.h>
 #include <mruby/compile.h>
+#include <mruby/hash.h>
 #include <mruby/error.h>
 #include <mruby/internal.h>
 #include <mruby/string.h>
@@ -23,6 +26,80 @@ static const char *ext_version = "awk-mruby-ext v1.0.0";
 static mrb_state *mrb;
 static mrbc_context *cxt;
 
+#define MRUBY_EVAL_RESULT_SYMBOL "MRUBY_EVAL_RESULT"
+
+static void mruby_value_to_awk_value(mrb_value val, awk_value_t *result, bool in_array)
+{
+    if (mrb_nil_p(val))
+    {
+        make_null_string(result);
+        return;
+    }
+
+    awk_array_t ary;
+    switch (mrb_type(val))
+    {
+    case MRB_TT_FALSE:
+        make_bool(awk_false, result);
+        break;
+    case MRB_TT_TRUE:
+        make_bool(awk_true, result);
+        break;
+    case MRB_TT_FIXNUM:
+        make_number(mrb_fixnum(val), result);
+        break;
+    case MRB_TT_FLOAT:
+        make_number(mrb_float(val), result);
+        break;
+    case MRB_TT_STRING:
+        make_const_string(RSTRING_PTR(val), RSTRING_LEN(val), result);
+        break;
+
+    case MRB_TT_ARRAY:
+        if (in_array)
+            fatal(ext_id, "mruby_eval: nested array is not supported");
+
+        ary = create_array();
+        result->val_type = AWK_ARRAY;
+        result->array_cookie = ary;
+
+        size_t arr_len = RARRAY_LEN(val);
+        for (size_t i = 0; i < arr_len; i++)
+        {
+            awk_value_t index, value;
+            make_number(i, &index);
+            mruby_value_to_awk_value(mrb_ary_ref(mrb, val, i), &value, true);
+            set_array_element(ary, &index, &value);
+        }
+        break;
+
+    case MRB_TT_HASH:
+        if (in_array)
+            fatal(ext_id, "mruby_eval: nested hash is not supported");
+
+        ary = create_array();
+        result->val_type = AWK_ARRAY;
+        result->array_cookie = ary;
+
+        mrb_value keys = mrb_hash_keys(mrb, val);
+        size_t keys_len = RARRAY_LEN(keys);
+        for (size_t i = 0; i < keys_len; i++)
+        {
+            awk_value_t key, value;
+            mrb_value k = mrb_ary_ref(mrb, keys, i);
+            mruby_value_to_awk_value(k, &key, true);
+            mruby_value_to_awk_value(mrb_hash_get(mrb, val, k), &value, true);
+            set_array_element(ary, &key, &value);
+        }
+        break;
+
+    default:
+        mrb_value s = mrb_funcall(mrb, val, "to_s", 0);
+        mruby_value_to_awk_value(s, result, false);
+        break;
+    }
+}
+
 static awk_value_t *do_mruby_eval(int nargs, awk_value_t *result, struct awk_ext_func *unused)
 {
     awk_value_t code;
@@ -35,14 +112,28 @@ static awk_value_t *do_mruby_eval(int nargs, awk_value_t *result, struct awk_ext
 
     mrbc_filename(mrb, cxt, "mruby_eval");
     int ai = mrb_gc_arena_save(mrb);
-    mrb_value rr = mrb_load_string_cxt(mrb, code.str_value.str, cxt);
+    mrb_value eval_result = mrb_load_string_cxt(mrb, code.str_value.str, cxt);
     if (mrb->exc != NULL)
     {
         const char *e = mrb_str_to_cstr(mrb, mrb_exc_inspect(mrb, mrb_obj_value(mrb->exc)));
         fatal(ext_id, "mruby_eval: %s", e);
     }
-    char *str = mrb_str_to_cstr(mrb, mrb_funcall(mrb, rr, "to_s", 0));
-    make_const_string(str, strlen(str), result);
+
+    awk_value_t r;
+    mruby_value_to_awk_value(eval_result, &r, false);
+    if (!sym_update(MRUBY_EVAL_RESULT_SYMBOL, &r))
+        fatal(ext_id, "mruby_eval: cannot update the result symbol");
+
+    if (r.val_type == AWK_ARRAY)
+    {
+        mrb_value s = mrb_funcall(mrb, eval_result, "to_s", 0);
+        make_const_string(RSTRING_PTR(s), RSTRING_LEN(s), result);
+    }
+    else
+    {
+        result->val_type = r.val_type;
+        result->u = r.u;
+    }
 
     mrb_gc_arena_restore(mrb, ai);
 
