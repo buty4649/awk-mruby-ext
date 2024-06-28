@@ -20,7 +20,26 @@ $ awk -l./mruby.so 'BEGIN{print mruby_eval("MRUBY_VERSION")}'
 3.3.0
 ```
 
-`mruby.so` adds the `mruby_eval` function. This function evaluates the Ruby code passed as an argument in the mruby VM and returns the result as a string. Even if the evaluation result is Numeric or Hash, it returns it as a string. This is a current limitation of `mruby.so`.
+`mruby.so` adds the `mruby_eval` and `mruby_set_val` functions.
+
+### `mruby_eval` Function
+
+This function evaluates and executes the Ruby code passed as an argument. After execution, it returns the last evaluated value, converted to the appropriate awk type. However, Array and Hash are converted to strings using the `to_s` method, because awk cannot return Array. If you need to retrieve Array or Hash, refer to the `MRUBY_EVAL_RESULT` variable. Below is an example using `MRUBY_EVAL_RESULT`:
+
+```sh
+$ awk -l./mruby.so 'BEGIN{print mruby_eval("{foo:1}"); print MRUBY_EVAL_RESULT["foo"]}'
+{:foo=>1}
+1
+```
+
+### `mruby_set_val` Function
+
+This function sets a value to a variable in the mruby VM. The variable set is always a global variable. The value set to the variable is always a string, and Array is not allowed. For example, the following example sets a variable named `$foo`:
+
+```sh
+$ awk -l./mruby.so 'BEGIN{mruby_set_val("$foo","bar");print mruby_eval("$foo")}'
+bar
+```
 
 ## Environment
 
