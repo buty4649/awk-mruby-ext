@@ -15,6 +15,7 @@
 #include <mruby/error.h>
 #include <mruby/internal.h>
 #include <mruby/string.h>
+#include <mruby/variable.h>
 
 int plugin_is_GPL_compatible;
 
@@ -140,8 +141,29 @@ static awk_value_t *do_mruby_eval(int nargs, awk_value_t *result, struct awk_ext
     return result;
 }
 
+static awk_value_t *do_mruby_set_val(int nargs, awk_value_t *result, struct awk_ext_func *unused)
+{
+    awk_value_t key, value;
+
+    if (nargs != 2)
+        fatal(ext_id, "mruby_set_val: expects 2 arguments but called with %d", nargs);
+
+    if (!get_argument(0, AWK_STRING, &key))
+        fatal(ext_id, "mruby_set_val: cannot retrieve 1st argument as a string");
+
+    if (!get_argument(1, AWK_STRING, &value))
+        fatal(ext_id, "mruby_set_val: cannot retrieve 2nd argument as a string");
+
+    mrb_sym k = mrb_intern(mrb, key.str_value.str, key.str_value.len);
+    mrb_value v = mrb_str_new_cstr(mrb, value.str_value.str);
+    mrb_gv_set(mrb, k, v);
+
+    return make_bool(awk_true, result);
+}
+
 static awk_ext_func_t func_table[] = {
     {"mruby_eval", do_mruby_eval, 1, 1, awk_false, NULL},
+    {"mruby_set_val", do_mruby_set_val, 2, 2, awk_false, NULL},
 };
 
 static void at_exit(void *data, int exit_status)
