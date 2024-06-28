@@ -6,10 +6,10 @@ A lightweight extension to integrate mruby scripting within GNU awk, providing e
 First, download the `mruby.so`.
 
 ```
-$ wget https://github.com/buty4649/awk-mruby-ext/releases/download/v1.0.0/mruby.so
+$ wget https://github.com/buty4649/awk-mruby-ext/releases/download/v1.1.0/mruby.so
 
 # optional: Verify the checksum
-$ wget https://github.com/buty4649/awk-mruby-ext/releases/download/v1.0.0/checksums.txt
+$ wget https://github.com/buty4649/awk-mruby-ext/releases/download/v1.1.0/checksums.txt
 $ sha256sum -c checksums.txt
 mruby.so: OK
 ```

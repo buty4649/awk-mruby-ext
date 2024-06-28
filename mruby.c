@@ -22,7 +22,7 @@ int plugin_is_GPL_compatible;
 static const gawk_api_t *api;
 
 static awk_ext_id_t ext_id;
-static const char *ext_version = "awk-mruby-ext v1.0.0";
+static const char *ext_version = "awk-mruby-ext v1.1.0";
 
 static mrb_state *mrb;
 static mrbc_context *cxt;
