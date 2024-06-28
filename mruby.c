@@ -46,9 +46,20 @@ static void at_exit(void *data, int exit_status)
     mrb_close(mrb);
 }
 
+static void *allocf(mrb_state *mrb, void *p, size_t size, void *ud)
+{
+    if (size == 0)
+    {
+        gawk_free(p);
+        return NULL;
+    }
+
+    return gawk_realloc(p, size);
+}
+
 static awk_bool_t init_mruby(void)
 {
-    mrb = mrb_open();
+    mrb = mrb_open_allocf(allocf, NULL);
 
     awk_atexit(at_exit, NULL);
     return awk_true;
